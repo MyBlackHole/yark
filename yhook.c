@@ -57,6 +57,7 @@ int yhook_init(void) {
 }
 
 // Callback function of the tracked function
+// 被跟踪函数的回调函数
 static void notrace fh_ftrace_thunk(unsigned long ip, unsigned long parent_ip,
                                     struct ftrace_ops *ops,
                                     struct ftrace_regs *fregs) {
@@ -69,6 +70,8 @@ static void notrace fh_ftrace_thunk(unsigned long ip, unsigned long parent_ip,
     /* Preventing the tracked function from being called recursively */
     if (!within_module(parent_ip, THIS_MODULE)) {
         hook->orig_address = ip;
+        // 记录被 hook 的函数
+        // 用于 hook 函数内部调用
         *hook->orig_function = (void *)hook->orig_address;
         /* set ip to hook function */
         regs->ip = (unsigned long)hook->hook_function;
@@ -76,6 +79,7 @@ static void notrace fh_ftrace_thunk(unsigned long ip, unsigned long parent_ip,
 }
 
 // register hook by ftrace
+// 注册钩子
 static int fh_install_hook(struct ftrace_hook *hook) {
     int err;
     int symbol_name_len;
@@ -89,11 +93,13 @@ static int fh_install_hook(struct ftrace_hook *hook) {
     };
     /* ftrace_set_filter() may modify the content of buf, so we make a copy of
      * hook->symbol_name for it */
+    // 函数名处理
     symbol_name_len = strlen(hook->symbol_name);
     symbol_name_owned = kmalloc(symbol_name_len + 1, GFP_KERNEL);
     memcpy(symbol_name_owned, hook->symbol_name, symbol_name_len);
     symbol_name_owned[symbol_name_len + 1] = '\0';
     /* call ftrace_set_filter() to search for target function */
+    // 查找目标
     err = ftrace_set_filter(&hook->ops, symbol_name_owned,
                             strlen(hook->symbol_name), 0);
     kfree(symbol_name_owned);
@@ -103,6 +109,7 @@ static int fh_install_hook(struct ftrace_hook *hook) {
         return err;
     }
     /* enable tracing call */
+    // 启用 hook
     err = register_ftrace_function(&hook->ops);
     if (err) {
         pr_err("register_ftrace_function() failed: %d\n", err);
@@ -112,6 +119,7 @@ static int fh_install_hook(struct ftrace_hook *hook) {
 }
 
 // unregister a hook
+// 移除 hook
 static void fh_remove_hook(struct ftrace_hook *hook) {
     int err;
 
@@ -125,6 +133,7 @@ static inline void write_cr0_forced(unsigned long val) {
     asm volatile("mov %0, %%cr0" : "+r"(val), "+m"(__force_order));
 }
 
+// 注册 hook 系统调用
 void hook_sys_call_table(long int sysno, t_syscall hook_fn,
                          t_syscall *orig_fn) {
     unsigned long cr0;
@@ -134,13 +143,19 @@ void hook_sys_call_table(long int sysno, t_syscall hook_fn,
                 "address of sys_call_table was not found, skip hook\n");
         return;
     }
+    // 读取控制寄存器值
     cr0 = read_cr0();
+    // 记录系统调用原地址
     *orig_fn = sys_call_table_ref[sysno];
+    // 关闭写保护
     write_cr0_forced(cr0 & ~0x00010000);
+    // 修改系统调用表
     sys_call_table_ref[sysno] = hook_fn;
+    // 恢复写保护
     write_cr0_forced(cr0);
 }
 
+// 恢复(设置)系统调用
 void unhook_sys_call_table(long int sysno, t_syscall orig_fn) {
     unsigned long cr0;
     pr_info(LOG_PREFIX "unhook syscall number %ld", sysno);
