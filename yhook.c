@@ -15,6 +15,7 @@ ftrace_get_regs(struct ftrace_regs *fregs) {
 #endif
 
 typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
+extern bool within_module(unsigned long addr, const struct module *mod);
 
 static kallsyms_lookup_name_t kallsyms_lookup_name_ref;
 static t_syscall *sys_call_table_ref;
@@ -31,6 +32,7 @@ unsigned long lookup_addr_by_name(const char *name) {
 int yhook_init(void) {
     /* lookup address of kallsyms_lookup_name() */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+    // 大于 5.7.0 后 kallsyms_lookup_name 没有导出
     struct kprobe kp = {.symbol_name = "kallsyms_lookup_name"};
     if (register_kprobe(&kp) < 0)
         return -EFAULT;
